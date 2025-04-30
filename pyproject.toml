@@ -25,8 +25,16 @@ dependencies = [
     "numpy==2.2.5",                                   # 2025-04-19 :contentReference[oaicite:7]{index=7}
     "jupyterlab==4.4.1",                              # 2025-04-22 :contentReference[oaicite:8]{index=8}
     "jupyter-collaboration==4.0.2",                   # 2025-04-22 :contentReference[oaicite:9]{index=9}
-    "datalayer-pycrdt>=0.12.15",                       # 2025-04-23 release :contentReference[oaicite:10]{index=10}
+    "datalayer-pycrdt>=0.12.15",                      # 2025-04-23 release :contentReference[oaicite:10]{index=10}
+    "pandas>=2.1.0",                                  # Added for ML notebook
+    "scikit-learn>=1.4.0",                            # Added for ML notebook
+    "matplotlib>=3.8.0",                              # Added for ML notebook
+    "seaborn>=0.13.0",                                # Added for ML notebook
+    "invoke>=2.1",                                    # for tasks.py
 ]
+
+[project.scripts]
+mcp-setup = "setup_mcp:main"
 
 [project.optional-dependencies]
 dev = [

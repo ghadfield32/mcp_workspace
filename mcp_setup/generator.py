@@ -3,103 +3,116 @@ MCP Setup Generator Module
 
 This module handles the generation and writing of the `.vscode/mcp.json` configuration file.
 """
+
 import os
 import json
 import pathlib
-from typing import Dict, List, Optional, Any
+import socket
+import sys                        # ← to detect platform
+from typing import Dict, List, Any, Optional
 
 from mcp_setup.validator import Validator, MCP_SERVERS
 
-
 class Generator:
-    """
-    Generates and writes the `.vscode/mcp.json` configuration file.
-    """
-    def __init__(self, validator: Optional[Validator] = None, env_file: str = ".env"):
-        """
-        Initialize the generator with a validator.
-
-        Args:
-            validator: Validator instance
-            env_file: Name of the env file (e.g. ".env.dev")
-        """
+    def __init__(self,
+                 validator: Optional[Validator] = None,
+                 env_file: str = ".env"):
         self.validator = validator or Validator()
-        self.env_file = env_file
-        self.output_dir = ".vscode"
+        self.env_file  = env_file
+        self.output_dir  = ".vscode"
         self.output_file = "mcp.json"
 
 
     def build_mcp_config(self, server_names: List[str]) -> Dict[str, Any]:
         """
-        Build .vscode/mcp.json, including a special path for Jupyter.
-
-        For 'jupyter-docker' templates, read the env vars at runtime
-        and build a docker run line embedding the real values.
+        Build .vscode/mcp.json, with OS-aware Jupyter networking:
+        - Linux/macOS: port-map if free, else --network host
+        - Windows: port-map if free, else drop port mapping
         """
-        import shutil, os
-        from mcp_setup.validator import MCP_SERVERS
+        import shutil, socket, sys
+
+        def is_port_free(port: int) -> bool:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind(("", port))
+                    return True
+                except OSError:
+                    return False
 
         cfg: Dict[str, Any] = {"servers": {}}
+        on_windows = sys.platform.startswith("win")
 
         for name in server_names:
             scfg = MCP_SERVERS.get(name)
             if not scfg:
-                print(f"⚠️  Unknown server '{name}' – skipped.")
+                print(f"[WARN] Unknown server '{name}' – skipped.")
                 continue
 
-            # --- Special path for Jupyter ---
+            # --- Jupyter special case ---
             if scfg.get("template") == "jupyter-docker":
-                # ensure required envs are present
                 missing = [v for v in scfg["env_vars"] if not os.getenv(v)]
                 if missing:
-                    print(f"❌  Missing {missing} for Jupyter – skipping.")
+                    print(f"[ERROR] Missing {missing} for Jupyter – skipping.")
                     continue
 
-                url       = os.environ["JUPYTER_URL"]
-                token     = os.environ["JUPYTER_TOKEN"]
-                notebook  = os.environ["NOTEBOOK_PATH"]
+                url      = os.environ["JUPYTER_URL"]
+                token    = os.environ["JUPYTER_TOKEN"]
+                notebook = os.environ["NOTEBOOK_PATH"]
 
-                # 🚀 Conditional networking:
-                # - On Linux you can do host networking: container sees localhost directly
-                # - On macOS/Windows use port-mapping + host.docker.internal
                 docker_args = ["run", "-i", "--rm"]
-                if os.getenv("MCP_HOST_NET", "").lower() == "true":
-                    # e.g. user exported MCP_HOST_NET=true
+
+                # Linux/macOS host-network override
+                if not on_windows and os.getenv("MCP_HOST_NET","").lower() == "true":
                     docker_args += ["--network", "host"]
                 else:
-                    # default for macOS/Windows
-                    docker_args += [
-                        "-e", "DOCKER_DEFAULT_PLATFORM=linux/amd64",
-                        "-p", "8888:8888"
-                    ]
+                    # Decide whether to port-map
+                    if is_port_free(8888):
+                        docker_args += [
+                            "-e", "DOCKER_DEFAULT_PLATFORM=linux/amd64",
+                            "-p", "8888:8888"
+                        ]
+                    else:
+                        if on_windows:
+                            print(
+                              "[WARN] Port 8888 busy on host; skipping `-p 8888:8888`. "
+                              "Container will reach your Jupyter at host.docker.internal:8888."
+                            )
+                            # no port-map
+                        else:
+                            # Linux/mac fallback
+                            print(
+                              "[INFO] Port 8888 busy; using --network host for Jupyter."
+                            )
+                            docker_args += ["--network", "host"]
 
+                # Always point container at host.docker.internal
                 docker_args += [
                     "-e", f"SERVER_URL={url}",
                     "-e", f"TOKEN={token}",
                     "-e", f"NOTEBOOK_PATH={notebook}",
                     "datalayer/jupyter-mcp-server:latest"
                 ]
-                entry = { "type": "stdio", "command": "docker", "args": docker_args }
-                cfg["servers"][name] = entry
+
+                cfg["servers"][name] = {
+                    "type":    "stdio",
+                    "command": "docker",
+                    "args":    docker_args
+                }
                 continue
 
             # --- Default stdio servers ---
             if scfg["type"] == "stdio":
-                cmd = list(scfg["command"])  # copy
-                # autodetect uvx / npx etc...
+                cmd = list(scfg["command"])
                 if cmd[0] == "uvx" and shutil.which("uvx"):
                     cmd[0] = shutil.which("uvx")
                 if cmd[0] == "npx" and not shutil.which("npx"):
                     if shutil.which("uvx"):
-                        print(f"ℹ️  Replacing missing npx with uvx for {name}")
+                        print(f"[INFO] Replacing missing npx with uvx for {name}")
                         cmd[0] = shutil.which("uvx")
                     else:
-                        print(f"❌  Neither 'npx' nor 'uvx' found – {name} will fail.")
+                        print(f"[ERROR] Neither 'npx' nor 'uvx' found – {name} will fail.")
 
-                entry = {
-                    "type": "stdio",
-                    "command": cmd[0],
-                }
+                entry = {"type": "stdio", "command": cmd[0]}
                 if len(cmd) > 1:
                     entry["args"] = cmd[1:]
                 entry["envFile"] = f"${{workspaceFolder}}/{self.env_file}"
@@ -113,7 +126,7 @@ class Generator:
             if scfg["type"] == "sse":
                 url = scfg.get("url") or os.getenv(scfg.get("url_env",""), "")
                 if not url:
-                    print(f"⚠️  No URL for '{name}' – skipped.")
+                    print(f"[WARN] No URL for '{name}' – skipped.")
                     continue
                 entry = {"type": "sse", "url": url}
                 if scfg.get("env_vars"):
@@ -138,7 +151,8 @@ class Generator:
         os.makedirs(self.output_dir, exist_ok=True)
         output_path = os.path.join(self.output_dir, self.output_file)
 
-        with open(output_path, "w") as f:
+        # Use utf-8 explicitly
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
 
         return output_path

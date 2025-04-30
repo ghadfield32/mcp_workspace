@@ -26,33 +26,33 @@ class Configurator:
 
     def load_environment(self) -> Dict[str, str]:
         """
-        Load environment variables from the .env file into both:
-        - a returned dict, and
-        - os.environ (so Validator sees them).
-        Inline comments (after '#') are stripped automatically.
+        Load env vars from self.env_file, populate os.environ, and return a dict.
+        Handles:
+          • UTF-8 files on any platform
+          • inline comments after a '#'
+        Prints a simple ASCII debug line for each key it loads so Windows shells
+        don't choke on Unicode.
         """
-        env_vars: Dict[str,str] = {}
+        env_vars: Dict[str, str] = {}
         if not os.path.exists(self.env_file):
-            print(f"⚠️ Warning: Environment file {self.env_file} not found.")
+            print(f"[WARN] Environment file {self.env_file} not found.")
             return env_vars
 
-        # Open as UTF-8, ignore bad bytes, and strip inline comments
-        with open(self.env_file, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                line = line.strip()
+        with open(self.env_file, "r", encoding="utf-8", errors="ignore") as fh:
+            for raw in fh:
+                line = raw.strip()
                 if not line or line.startswith("#"):
                     continue
+                if "=" not in line:
+                    continue
 
-                if "=" in line:
-                    key, raw_value = line.split("=", 1)
-                    key = key.strip()
-
-                    # Drop anything after a '#' (inline comment)
-                    val = raw_value.split("#", 1)[0].strip().strip("'\"")
-
-                    env_vars[key] = val
-                    os.environ[key] = val
-                    print(f"🔍 Loaded {key}={val}")  # debug log
+                key, val_raw = line.split("=", 1)
+                key = key.strip()
+                # strip the part after a '#' comment – works even if none present
+                val = val_raw.split("#", 1)[0].strip().strip("'\"")
+                env_vars[key] = val
+                os.environ[key] = val
+                print(f"[DBG] Loaded {key}={val}")
 
         self.env_vars = env_vars
         return env_vars

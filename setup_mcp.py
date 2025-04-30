@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 MCP Setup CLI
 
@@ -123,8 +124,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Setup MCP servers for VS Code")
     parser.add_argument(
-        "--env", 
-        choices=["dev", "stage", "prod"], 
+        "--env",
+        choices=["dev", "stage", "prod"],
         required=True,
         help="Environment to use (dev, stage, or prod)"
     )
@@ -134,35 +135,37 @@ def main() -> int:
     env_file = f".env.{args.env}"
     configurator = Configurator(env_file)
     validator = Validator(configurator)
-    # pass the very same env_file we loaded so mcp.json points correctly
     generator = Generator(validator, env_file=os.path.basename(env_file))
 
     # Step 1: Load environment
-    print(f"\n🔍 Loading environment from {env_file}...")
+    print(f"\n[INFO] Loading environment from {env_file} ...")
     try:
         env_vars = configurator.load_environment()
         if not env_vars:
-            print(f"⚠️ Warning: No environment variables found in {env_file}.")
+            print(f"[WARN] No environment variables found in {env_file}.")
     except Exception as e:
-        print(f"❌ Error loading environment: {e}")
+        print(f"[ERROR] Error loading environment: {e}")
         return 1
 
     # Step 2: Present server checklist
     selected_servers = select_servers(validator)
     if not selected_servers:
-        print("❌ No servers selected. Exiting.")
+        print("[ERROR] No servers selected. Exiting.")
         return 1
 
-    print(f"\n📋 Selected servers: {', '.join(selected_servers)}")
+    print(f"\n[INFO] Selected servers: {', '.join(selected_servers)}")
 
-    print("\n🔑 Prompting for any missing credentials…")
+    # Step 3: Prompt for missing credentials
+    print("\n[INFO] Prompting for any missing credentials...")
     prompt_for_env_vars(selected_servers, env_file)
-    print("🛠️  Environment now contains:", 
-        ", ".join(k for k in MCP_SERVERS.get(selected_servers[0].split(':')[0], {}).get("env_vars", []) 
+    print("[INFO] Environment now contains:",
+          ", ".join(k for k in MCP_SERVERS
+                          .get(selected_servers[0].split(":")[0], {})
+                          .get("env_vars", [])
                     if k in os.environ))
 
-    # Step 3: Validate servers
-    print("\n🔍 Validating selected servers...")
+    # Step 4: Validate servers
+    print("\n[INFO] Validating selected servers...")
     validation_results = validator.validate_servers(selected_servers)
 
     valid_servers = []
@@ -171,54 +174,43 @@ def main() -> int:
     for name, result in validation_results.items():
         if result["valid"]:
             valid_servers.append(name)
-            print(f"  ✅ {name}: Valid")
+            print(f"[OK]   {name}: Valid")
         else:
             invalid_servers.append((name, result))
-            missing_env = result.get("missing_env", [])
-            missing_files = result.get("missing_files", [])
+            print(f"[FAIL] {name}: Invalid")
+            if result["missing_env"]:
+                print(f"       Missing env vars: {', '.join(result['missing_env'])}")
+            if result["missing_files"]:
+                print(f"       Missing files:    {', '.join(result['missing_files'])}")
 
-            print(f"  ❌ {name}: Invalid")
-            if missing_env:
-                print(f"     - Missing environment variables: {', '.join(missing_env)}")
-            if missing_files:
-                print(f"     - Missing files: {', '.join(missing_files)}")
-
-
-    # Step 4: Generate MCP configuration
+    # Step 5: Generate MCP configuration
     if valid_servers:
-        print("\n🔧 Generating MCP configuration...")
+        print("\n[INFO] Generating MCP configuration...")
         result = generator.generate_mcp_config(valid_servers)
 
         if result["success"]:
-            print(f"  ✅ Configuration written to {result['output_path']}")
-            config_servers = result["config"].get("servers", {})
-            print(f"  ℹ️ Configured servers: {', '.join(config_servers.keys())}")
+            print(f"[OK] Configuration written to {result['output_path']}")
+            cfg_keys = ", ".join(result["config"].get("servers", {}).keys())
+            print(f"[INFO] Configured servers: {cfg_keys}")
         else:
-            print(f"  ❌ Error generating configuration: {result.get('error', 'Unknown error')}")
+            print(f"[ERROR] Error generating configuration: {result.get('error', 'Unknown')}")
             return 1
     else:
-        print("\n⚠️ No valid servers found. Configuration not generated.")
+        print("[WARN] No valid servers found. Configuration not generated.")
         return 1
 
-    # Step 5: Print summary report
-    print("\n📊 Setup Summary:")
-    print(f"  ✅ Successfully configured: {len(valid_servers)} server(s)")
-    print(f"  ❌ Failed to configure: {len(invalid_servers)} server(s)")
-
+    # Step 6: Summary
+    print("\n[SUMMARY]")
+    print(f"  - Successfully configured: {len(valid_servers)} server(s)")
+    print(f"  - Failed to configure:     {len(invalid_servers)} server(s)")
     if invalid_servers:
-        print("\n⚠️ Failed Servers:")
-        for name, result in invalid_servers:
-            missing_env = result.get("missing_env", [])
-            missing_files = result.get("missing_files", [])
+        print("  Details of failures:")
+        for name, res in invalid_servers:
+            print(f"    * {name}: missing {res.get('missing_env') or res.get('missing_files')}")
 
-            print(f"  • {name}:")
-            if missing_env:
-                print(f"    - Missing environment variables: {', '.join(missing_env)}")
-            if missing_files:
-                print(f"    - Missing files: {', '.join(missing_files)}")
-
-    print("\n✨ Done. Use 'MCP: List Servers' in VS Code to verify your configuration.")
+    print("\n[INFO] Done. You can verify in VS Code with 'MCP: List Servers'.")
     return 0
+
 
 
 if __name__ == "__main__":

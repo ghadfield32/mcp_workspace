@@ -1,139 +1,90 @@
+```markdown
 # MCP Setup Tool
 
-This repository provides a CLI to scaffold and configure **Model Context Protocol (MCP)** servers for use in VS Code, including Jupyter, Snowflake, Code Executor, and more.
+A one-command bootstrap + CLI that scaffolds **Model Context Protocol (MCP)** servers
+for VS Code – Jupyter, Snowflake, Code Executor, OracleDB, Gitingest-MCP, and more.
+A FastAPI management service is also included for programmatic control.
 
 ---
 
-## Prerequisites
+## Prerequisites (3 things)
 
-- **Python 3.10+** and `pip`
-- **Node.js & npm** (required to build the Code Executor module)
-- **Docker** (for the Jupyter MCP server)
-- **JupyterLab** with `ipykernel` and real‑time collaboration:
-  ```bash
-  pip install jupyterlab==4.4.1 jupyter‑collaboration==4.0.2 ipykernel
-  ```
-- (Optional) **uvx** CLI for Gitingest-MCP:
-  ```bash
-  npm install -g @datalayer/uvx
-  ```
+| What | Why |
+|------|-----|
+| **Python 3.12+** + [`uv`](https://github.com/astral-sh/uv) | `uv` handles virtual-env creation **and** dependency sync in one shot. <br>Install once via `pipx install uv` or `pip install -U uv`. |
+| **Node.js & npm** | Builds the *Code Executor* sub-project. |
+| **Docker** | Runs the Jupyter MCP server in a container. |
 
----
-
-## Getting Started
-
-1. **Clone the repo**
-   ```bash
-   git clone https://github.com/your-org/mcp-setup.git
-   cd mcp-setup
-   ```
-
-2. **Create & activate a Python virtual environment**
-   ```bash
-   python -m venv .venv
-   # macOS/Linux
-   source .venv/bin/activate
-   # Windows (PowerShell)
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-3. **Install Python dependencies**
-   ```bash
-   pip install -e .
-   ```
-
-4. **Build the Code Executor**
-   Navigate into the `mcp_code_executor` subproject, install its Node.js dependencies, and build:
-   ```bash
-   cd mcp_code_executor
-   npm install
-   npm run build
-   cd ..
-   ```
-
-5. **Install `uvx` (for Gitingest‑MCP)**
-   ```bash
-   npm install -g @datalayer/uvx
-   ```
-
-6. **Prepare your environment file**
-   - Copy the example and rename:
-     ```bash
-     # macOS/Linux
-     cp .env.example .env.dev
-     # Windows
-     copy .env.example .env.dev
-     ```
-   - Edit `.env.dev`, filling in your credentials. **Remove any inline comments** after the `=` to avoid parsing issues.
-     ```dotenv
-     CODE_STORAGE_DIR=code_executor_storage
-     CONDA_ENV_NAME=my_conda_env
-
-     SNOWFLAKE_ACCOUNT=ACCOUNT
-     SNOWFLAKE_USER=USER
-     ...
-
-     # JupyterLab (macOS/Win): use host.docker.internal
-     JUPYTER_URL=http://host.docker.internal:8888
-     JUPYTER_TOKEN=abc12345
-     NOTEBOOK_PATH=notebooks/demo.ipynb
-
-     # OracleDB
-     ORACLE_CONNECTION_STRING=username/password@//host:port/service
-     TARGET_SCHEMA=myschema
-     ```
-
-7. **Export your Jupyter token**
-   ```bash
-   # macOS/Linux
-   export MY_JUPYTER_TOKEN=abc12345
-   # Windows PowerShell
-   $Env:MY_JUPYTER_TOKEN = "abc12345"
-   ```
-
-8. **Start JupyterLab**
-   ```bash
-   jupyter lab --port 8888 \
-     --IdentityProvider.token $MY_JUPYTER_TOKEN \
-     --ip 0.0.0.0
-   ```
-   - **Linux users** (host networking):
-     ```bash
-     export MCP_HOST_NET=true
-     ```
-
-9. **Run the MCP setup script**
-   ```bash
-   python setup_mcp.py --env dev
-   ```
-   - Select which servers to enable
-   - Provide any missing credentials when prompted
-   - On success, `.vscode/mcp.json` is generated
-
-10. **Verify in VS Code**
-    - Open this workspace in VS Code
-    - Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> (or <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>)
-    - Run **MCP: List Servers** — your configured servers should appear
+> **Optional**:  
+> • `npm i -g @datalayer/uvx` if you want the **Gitingest-MCP** server.  
+> • `pip install jupyterlab==4.4.1 jupyter-collaboration==4.0.2 ipykernel` if you
+>   plan to run *local* JupyterLab instead of the container image.
 
 ---
 
-## Troubleshooting
+## Quick start — 3 commands
 
-- **403 `'_xsrf' argument missing from POST'`**
-  - Ensure `JUPYTER_TOKEN` in `.env.dev` exactly matches the token used to start JupyterLab
-  - On Linux set `MCP_HOST_NET=true` before running the setup script
+```bash
+git clone https://github.com/your-org/mcp-setup.git
+cd mcp-setup
 
-- **Unicode errors loading `.env.dev`**
-  - Save the file as UTF‑8 without BOM
+inv bootstrap --env=dev   # ① create venv with uv, ② npm build, ③ copy .env.dev and update with your api keys
+inv mcp       --env=dev   # ① launch Jupyter in bg, ② interactive server wizard
+```
 
-- **`uvx` not found**
-  - Install globally via `npm install -g @datalayer/uvx`
+Open VS Code → Press ctrl + shift + P → **MCP: List Servers** – you should see the servers list stopped, click them and press enter to start them. Then open the chat window and they will show in Agent mode (of vscode or cursor mode).
 
 ---
 
-## Next Steps
+## What each task does
 
-- Extend `MCP_SERVERS` in `validator.py` to add new servers
-- Write automated tests for the setup tool
-- Package as a PyPI CLI entry point for easy installation
+| Task | What happens internally |
+|------|-------------------------|
+| **`inv bootstrap --env=<e>`** | *Python side* • `uv venv .venv` (or reuse). • `uv sync --extra dev` (installs deps **and** this repo in editable mode).<br>*Node side* • `npm install && npm run build` inside `mcp_code_executor/`.<br>*Quality-of-life* • Installs `uvx` (if npm available). • Copies `.env.example` → `.env.<e>`. |
+| **`inv mcp --env=<e>`** | *Background* • Starts JupyterLab on :8888 with the token from `.env.<e>`.<br>*Wizard* • Lets you pick servers, prompts for any missing env vars, validates, and writes `.vscode/mcp.json` with smart Docker/stdio/SSE entries.<br>*After* • Leaves Jupyter running so VS Code can connect immediately. |
 
+---
+
+## Minimal manual edits
+
+1. **Edit `.env.<env>`** – fill in credentials (Snowflake, Oracle, etc.).  
+   *Inline comments after `=` will be ignored.*
+2. (Optional) **Set `MCP_HOST_NET=true`** on Linux if port 8888 is already in use
+   and you prefer `--network host` for the Jupyter container.
+
+Everything else is automated by the Invoke tasks.
+
+---
+
+## Troubleshooting FAQ
+
+| Symptom | Fix |
+|---------|-----|
+| `docker: failed to bind port 8888` | Windows/macOS: the container skips `-p 8888:8888` automatically and talks to `host.docker.internal:8888`. Linux: export `MCP_HOST_NET=true`. |
+| 403 `'_xsrf' argument missing` | `JUPYTER_TOKEN` in `.env.<env>` must *exactly* match the one JupyterLab started with. |
+| `uvx` not found when enabling Gitingest-MCP | `npm i -g @datalayer/uvx` |
+| Unicode errors reading `.env` | Save file as **UTF-8 (without BOM)**. |
+
+---
+
+## Next steps
+
+* Extend **`MCP_SERVERS`** in `mcp_setup/validator.py` to add more back-ends.  
+* Ship automated tests for validation / generation.  
+* Publish to PyPI so users can simply run    
+  `pipx install mcp-server-setup && mcp-setup --env dev`.
+```
+
+---
+
+### Why the old steps are gone
+
+| Old README step | Needed now? | Why |
+|-----------------|-------------|-----|
+| `python -m venv …` | **No** | `uv venv` inside `inv bootstrap` handles it. |
+| `pip install -e .` | **No** | `uv sync` automatically installs the project in editable mode. |
+| Manual JupyterLab launch | **No** | `inv mcp` spins Jupyter up in the background, waits 5 s, then runs the generator. |
+| `npm install -g @datalayer/uvx` | **Optional** | Only required if you enable the Gitingest-MCP server. |
+| FastAPI / Uvicorn API section | **Optional** | Start it only if you want the HTTP control plane; the CLI works fine without it. |
+
+Enjoy the single-command setup!
