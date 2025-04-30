@@ -8,12 +8,30 @@ import os
 import pathlib
 from typing import Dict, List, Optional, Any
 from mcp_setup.configurator import Configurator
+from importlib.resources import files
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Compute the repository root once, then build our relative path to the
-# code-executor bundle:
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-CODE_EXECUTOR_JS = ROOT / "mcp_code_executor" / "build" / "index.js"
+# Compute the code executor path in a way that works for both development and installed environments
+def _code_executor_path() -> pathlib.Path:
+    # First, try the workspace directory (development mode)
+    root = pathlib.Path(__file__).resolve().parent.parent
+    workspace_path = root / "mcp_code_executor" / "build" / "index.js"
+    if (workspace_path.exists()):
+        return workspace_path
+
+    # Next, try the current working directory (for when running as a command)
+    cwd_path = pathlib.Path.cwd() / "mcp_code_executor" / "build" / "index.js"
+    if (cwd_path.exists()):
+        return cwd_path
+
+    # Finally, try the installed package path (for when installed as a package)
+    try:
+        return files("mcp_setup") / "mcp_code_executor" / "build" / "index.js"
+    except ImportError:
+        # Fall back to the original path and let it fail later if necessary
+        return workspace_path
+
+CODE_EXECUTOR_JS = _code_executor_path()
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Define MCP servers with their required environment variables and files

@@ -48,6 +48,9 @@ dev = [
 include = ["mcp_setup*"]
 exclude = ["archive*"]
 
+[tool.setuptools.package-data]
+"mcp_setup.mcp_code_executor" = ["build/index.js", "**/*.map", "**/*.wasm"]
+
 [tool.black]
 line-length = 88
 target-version = ["py312"]
