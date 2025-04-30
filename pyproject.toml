@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]        # pick up 2025‐era PEP 517 fixes
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-server-setup"
+version = "0.2.0"
+description = "Model Context Protocol (MCP) server setup utilities"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "MCP Developer", email = "developer@example.com" }]
+
+dependencies = [
+    "ipywidgets==8.1.6",                              # 2025-04-10 release :contentReference[oaicite:0]{index=0}
+    "jupyter==1.1.1",                                 # 2024-08-30 meta-pkg :contentReference[oaicite:1]{index=1}
+    "notebook>=7.4,<7.5",                             # v7 frontend stack :contentReference[oaicite:2]{index=2}
+    "python-dotenv>=1.0",                             # minor-only bump-safe
+    "requests>=2.31",                                 # latest stable
+    "uvicorn==0.34.2",                                # 2025-03-14 :contentReference[oaicite:3]{index=3}
+    "fastapi==0.115.12",                              # 2025-03-23 :contentReference[oaicite:4]{index=4}
+    "pydantic==2.11.4",                               # 2025-04-29 :contentReference[oaicite:5]{index=5}
+    "httpx>=0.27",                                    # matches FastAPI upper pin
+    "pillow==11.2.1",                                 # 2025-04-12 :contentReference[oaicite:6]{index=6}
+    "numpy==2.2.5",                                   # 2025-04-19 :contentReference[oaicite:7]{index=7}
+    "jupyterlab==4.4.1",                              # 2025-04-22 :contentReference[oaicite:8]{index=8}
+    "jupyter-collaboration==4.0.2",                   # 2025-04-22 :contentReference[oaicite:9]{index=9}
+    "datalayer-pycrdt>=0.12.15",                       # 2025-04-23 release :contentReference[oaicite:10]{index=10}
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "black>=24.3",        # supports Python 3.12
+    "flake8>=7.0",
+    "mypy>=1.10",
+]
+
+[tool.setuptools.packages.find]
+include = ["mcp_setup*"]
+exclude = ["archive*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
