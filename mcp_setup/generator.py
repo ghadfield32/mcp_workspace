@@ -17,10 +17,23 @@ class Generator:
     def __init__(self,
                  validator: Optional[Validator] = None,
                  env_file: str = ".env"):
+        from pathlib import Path
+
         self.validator = validator or Validator()
         self.env_file  = env_file
-        self.output_dir  = ".vscode"
         self.output_file = "mcp.json"
+
+        # 1) Find the "workspace root" by looking for a .git folder:
+        cwd = Path.cwd().resolve()
+        for parent in [cwd] + list(cwd.parents):
+            if (parent / ".git").exists():
+                self.workspace_root = parent
+                break
+        else:
+            self.workspace_root = cwd
+
+        # 2) VS Code expects its .vscode folder at the workspace root
+        self.output_dir = self.workspace_root / ".vscode"
 
 
     def build_mcp_config(self, server_names: List[str]) -> Dict[str, Any]:
@@ -115,7 +128,24 @@ class Generator:
                 entry = {"type": "stdio", "command": cmd[0]}
                 if len(cmd) > 1:
                     entry["args"] = cmd[1:]
-                entry["envFile"] = f"${{workspaceFolder}}/{self.env_file}"
+
+                # ─── locate the actual .env file under the workspace ───
+                from pathlib import Path
+                ws = Path(self.workspace_root)
+                # try root first
+                if (ws / self.env_file).exists():
+                    rel_env = self.env_file
+                else:
+                    # fallback: search all subfolders once
+                    found = next(ws.rglob(self.env_file), None)
+                    if found:
+                        rel_env = str(found.relative_to(ws))
+                    else:
+                        # gives up: warning and leave as-is
+                        print(f"[WARN] Could not find {self.env_file} under {ws}; using top‐level reference.")
+                        rel_env = self.env_file
+
+                entry["envFile"] = f"${{workspaceFolder}}/{rel_env}"
                 if scfg.get("env_vars"):
                     entry["env"] = {v: os.getenv(v, "") for v in scfg["env_vars"]}
 
