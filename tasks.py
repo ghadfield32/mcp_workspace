@@ -127,66 +127,78 @@ def jupyter(c, env="dev"):
 
 # 6. Run the MCP setup and generate your VS Code config
 @task
-def mcp(c, env="dev"):
+def mcp(c, env="dev", cursor=False):
     """
     1) Start JupyterLab in the background (so the port and token are live).
     2) Wait a few seconds for it to spin up.
     3) Run setup_mcp.py --env {env} to configure VS Code.
     4) Leave Jupyter running so VS Code can actually connect.
     5) Sync environment file and MCP configuration to parent directory.
+    6) If --cursor is True, also sync to .cursor/mcp.json.
     """
+    # 1) Read the token from .env
     env_path = ENV_FILES.get(env)
     token = None
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8", errors="ignore") as fh:
             for ln in fh:
                 if ln.partition("=")[0].strip() == "JUPYTER_TOKEN":
-                    token = ln.partition("=")[2].split("#", 1)[0].strip()
+                    token = ln.partition("=")[2].split("#",1)[0].strip()
                     break
 
+    # 2) Launch JupyterLab
     jupyter_cmd = [
         VENV_PYTHON, "-m", "jupyter", "lab",
         "--port", JUPYTER_PORT, "--ip=0.0.0.0",
+        f"--NotebookApp.token={token or ''}"
     ]
-    if token:
-        jupyter_cmd.append(f"--NotebookApp.token={token}")
-    else:
-        jupyter_cmd.append("--NotebookApp.token=''")
-
     print(f"[INFO] Launching JupyterLab (token={token}) …")
     jproc = subprocess.Popen(jupyter_cmd)
 
-    # give it a moment to bind to port 8888
+    # 3) Give it time to bind
     time.sleep(5)
 
+    # 4) Run the MCP setup CLI (which writes .vscode/mcp.json in the workspace)
     print(f"[INFO] Running MCP setup with env='{env}' …")
     c.run(f"{VENV_PYTHON} setup_mcp.py --env {env}", echo=True)
 
-    # ─── NEW: Sync files up one level ──────────────────────────────
-    root = os.getcwd()       # e.g. …/mcp_workspace
+    # 5) Compute workspace and parent paths
+    root = os.getcwd()                 # e.g. …/mcp_workspace
     parent = os.path.dirname(root)
 
-    # copy .env.dev → ../.env.dev
+    # 6) Copy the .env.<env> up one level
     src_env = os.path.join(root, ENV_FILES[env])
     dst_env = os.path.join(parent, ENV_FILES[env])
-
-    # Use cp command for Unix/Linux/MacOS, copy for Windows
     copy_cmd = "copy" if WIN else "cp"
     c.run(f"{copy_cmd} {src_env} {dst_env}", echo=True)
 
-    # ensure parent has a .vscode folder
+    # 7) Ensure parent .vscode and copy there
     parent_vscode = os.path.join(parent, ".vscode")
-    if not os.path.isdir(parent_vscode):
-        os.makedirs(parent_vscode)
-
-    # copy mcp.json → ../.vscode/mcp.json
+    os.makedirs(parent_vscode, exist_ok=True)
     src_cfg = os.path.join(root, ".vscode", "mcp.json")
-    dst_cfg = os.path.join(parent_vscode, "mcp.json")
-    c.run(f"{copy_cmd} {src_cfg} {dst_cfg}", echo=True)
+    dst_vscode_cfg = os.path.join(parent_vscode, "mcp.json")
+    c.run(f"{copy_cmd} {src_cfg} {dst_vscode_cfg}", echo=True)
 
-    print(f"✅  Synced {src_env} → {dst_env} and {src_cfg} → {dst_cfg}")
+    # 8) Optionally also sync to a .cursor folder
+    if cursor:
+        # a) create .cursor in workspace & parent
+        ws_cursor = os.path.join(root, ".cursor")
+        pr_cursor = os.path.join(parent, ".cursor")
+        os.makedirs(ws_cursor, exist_ok=True)
+        os.makedirs(pr_cursor, exist_ok=True)
 
-    print("[INFO] JupyterLab is still running in the background. ")
+        # b) copy the same mcp.json
+        dst_ws_cursor = os.path.join(ws_cursor, "mcp.json")
+        dst_pr_cursor = os.path.join(pr_cursor, "mcp.json")
+        shutil.copyfile(src_cfg, dst_ws_cursor)
+        c.run(f"{copy_cmd} {dst_ws_cursor} {dst_pr_cursor}", echo=True)
+        print(f"✅  Also synced cursor config → {dst_pr_cursor}")
+
+    print(f"✅  Synced env and VS Code config to {parent_vscode}")
+    if cursor:
+        print(f"✅  Synced cursor config to {os.path.join(parent, '.cursor')}")
+
+    print("[INFO] JupyterLab is still running in the background.")
     print("       You can now open VS Code and do 'MCP: List Servers'.")
 
 # 7. A "meta" task to do it all (minus editing env)
@@ -209,11 +221,4 @@ def bootstrap(c, env="dev"):
     print(f"🚀  Bootstrap complete with uv-managed environment for '{env}'!")
     print(f"👉  Next step: edit `.env.{env}` to fill in your credentials.")
     print(f"👉  Then run: `inv mcp --env={env}`")
-
-
-
-
-
-
-
 
