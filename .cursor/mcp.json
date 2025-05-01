@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "C:\\docker_projects\\mcp_workspace\\mcp_code_executor\\build\\index.js"
+        "C:\\docker_projects\\cursor_tester\\mcp_workspace\\mcp_code_executor\\build\\index.js"
       ],
       "envFile": "${workspaceFolder}/.env.dev",
       "env": {
@@ -22,7 +22,7 @@
         "-e",
         "SERVER_URL=http://host.docker.internal:8888",
         "-e",
-        "TOKEN=abc12345",
+        "TOKEN=insert_token",
         "-e",
         "NOTEBOOK_PATH=notebooks/demo.ipynb",
         "datalayer/jupyter-mcp-server:latest"
@@ -30,7 +30,7 @@
     },
     "Gitingest-MCP": {
       "type": "stdio",
-      "command": "C:\\docker_projects\\mcp_workspace\\.venv/Scripts\\uvx.EXE",
+      "command": "C:\\Users\\ghadf\\anaconda3\\Scripts\\uvx.EXE",
       "args": [
         "--from",
         "git+https://github.com/puravparab/gitingest-mcp",

@@ -179,20 +179,34 @@ def mcp(c, env="dev", cursor=False):
     dst_vscode_cfg = os.path.join(parent_vscode, "mcp.json")
     c.run(f"{copy_cmd} {src_cfg} {dst_vscode_cfg}", echo=True)
 
-    # 8) Optionally also sync to a .cursor folder
+    # 8) Optionally also sync to a .cursor folder in Cursor format
     if cursor:
-        # a) create .cursor in workspace & parent
+        import json
+
         ws_cursor = os.path.join(root, ".cursor")
         pr_cursor = os.path.join(parent, ".cursor")
         os.makedirs(ws_cursor, exist_ok=True)
         os.makedirs(pr_cursor, exist_ok=True)
 
-        # b) copy the same mcp.json
+        # read the vscode config we just wrote
+        with open(src_cfg, "r", encoding="utf-8") as f:
+            vscode_cfg = json.load(f)
+
+        # build the cursor‐format config (reuse "servers" key)
+        cursor_cfg = {
+            "servers": vscode_cfg.get("servers", {})
+        }
+
+        # write it into each .cursor/mcp.json
         dst_ws_cursor = os.path.join(ws_cursor, "mcp.json")
         dst_pr_cursor = os.path.join(pr_cursor, "mcp.json")
-        shutil.copyfile(src_cfg, dst_ws_cursor)
-        c.run(f"{copy_cmd} {dst_ws_cursor} {dst_pr_cursor}", echo=True)
-        print(f"✅  Also synced cursor config → {dst_pr_cursor}")
+        for dst in (dst_ws_cursor, dst_pr_cursor):
+            with open(dst, "w", encoding="utf-8") as f:
+                json.dump(cursor_cfg, f, indent=2)
+
+        # (already written both)
+
+        print(f"✅  Also wrote Cursor config → {dst_pr_cursor}")
 
     print(f"✅  Synced env and VS Code config to {parent_vscode}")
     if cursor:
@@ -221,4 +235,5 @@ def bootstrap(c, env="dev"):
     print(f"🚀  Bootstrap complete with uv-managed environment for '{env}'!")
     print(f"👉  Next step: edit `.env.{env}` to fill in your credentials.")
     print(f"👉  Then run: `inv mcp --env={env}`")
+
 
