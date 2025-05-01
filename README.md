@@ -26,6 +26,7 @@ cd mcp-setup/mcp_workspace
 
 inv bootstrap --env=dev   # ① create venv with uv, ② npm build, ③ copy .env.dev and update with your API keys
 inv mcp       --env=dev   # ① launch Jupyter in bg, ② interactive server wizard
+inv mcp       --env=dev --cursor   # (optional) use --cursor to enable cursor mode
 cd ..                  # sync .env and .vscode/mcp.json to repo root
 ```
 
@@ -81,5 +82,5 @@ Everything else is automated by the Invoke tasks.
 | `npm install -g @datalayer/uvx`   | Optional    | Only needed to enable the Gitingest‑MCP server.                                                  |
 | FastAPI/Uvicorn API section       | Optional    | Only if you want an HTTP control plane; the CLI works without it.                                |
 
-Enjoy the single‑command setup!  
+Enjoy the single‑command setup!
 
