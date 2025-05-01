@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-setup = "setup_mcp:main"
+mcp-setup = "mcp_setup.cli:main"
 
 [project.optional-dependencies]
 dev = [
