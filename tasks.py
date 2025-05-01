@@ -9,6 +9,7 @@ import shutil
 import subprocess    # ← new
 import time          # ← new
 from invoke import task, UnexpectedExit
+import json
 
 # Cross-platform Python / venv paths
 PYTHON = sys.executable
@@ -172,48 +173,81 @@ def mcp(c, env="dev", cursor=False):
     copy_cmd = "copy" if WIN else "cp"
     c.run(f"{copy_cmd} {src_env} {dst_env}", echo=True)
 
-    # 7) Ensure parent .vscode and copy there
-    parent_vscode = os.path.join(parent, ".vscode")
-    os.makedirs(parent_vscode, exist_ok=True)
+    # Read the source config file which is always created by setup_mcp.py
     src_cfg = os.path.join(root, ".vscode", "mcp.json")
-    dst_vscode_cfg = os.path.join(parent_vscode, "mcp.json")
-    c.run(f"{copy_cmd} {src_cfg} {dst_vscode_cfg}", echo=True)
+    
+    # Check if the source config file exists
+    if not os.path.exists(src_cfg):
+        print(f"⚠️  Warning: Source config file {src_cfg} not found!")
+        print(f"    This may happen if setup_mcp.py failed to create it.")
+        # Create a minimal default config if the file doesn't exist
+        os.makedirs(os.path.dirname(src_cfg), exist_ok=True)
+        with open(src_cfg, "w", encoding="utf-8") as f:
+            json.dump({"servers": {}}, f)
+        print(f"✅  Created minimal default config at {src_cfg}")
 
-    # 8) Optionally also sync to a .cursor folder in Cursor format
+    if not cursor:
+        # 7) When not in cursor mode, ensure parent .vscode and copy there
+        parent_vscode = os.path.join(parent, ".vscode")
+        os.makedirs(parent_vscode, exist_ok=True)
+        dst_vscode_cfg = os.path.join(parent_vscode, "mcp.json")
+        c.run(f"{copy_cmd} {src_cfg} {dst_vscode_cfg}", echo=True)
+        print(f"✅  Synced env and VS Code config to {parent_vscode}")
+    
+    # 8) Handle cursor folder config
     if cursor:
-        import json
-
         ws_cursor = os.path.join(root, ".cursor")
         pr_cursor = os.path.join(parent, ".cursor")
-        os.makedirs(ws_cursor, exist_ok=True)
-        os.makedirs(pr_cursor, exist_ok=True)
+        
+        print(f"[DEBUG] Creating cursor directories:")
+        print(f"  - Workspace cursor dir: {ws_cursor}")
+        print(f"  - Parent cursor dir: {pr_cursor}")
+        
+        try:
+            os.makedirs(ws_cursor, exist_ok=True)
+            os.makedirs(pr_cursor, exist_ok=True)
+            
+            # read the vscode config we just wrote
+            try:
+                with open(src_cfg, "r", encoding="utf-8") as f:
+                    vscode_cfg = json.load(f)
+                    print(f"[DEBUG] Successfully read source config from {src_cfg}")
+            except Exception as e:
+                print(f"[ERROR] Failed to read source config: {e}")
+                vscode_cfg = {"servers": {}}
+                print(f"[DEBUG] Using default empty config instead")
 
-        # read the vscode config we just wrote
-        with open(src_cfg, "r", encoding="utf-8") as f:
-            vscode_cfg = json.load(f)
+            # build the cursor‐format config (reuse "servers" key)
+            cursor_cfg = {
+                "servers": vscode_cfg.get("servers", {})
+            }
 
-        # build the cursor‐format config (reuse "servers" key)
-        cursor_cfg = {
-            "servers": vscode_cfg.get("servers", {})
-        }
+            # write it into each .cursor/mcp.json
+            dst_ws_cursor = os.path.join(ws_cursor, "mcp.json")
+            dst_pr_cursor = os.path.join(pr_cursor, "mcp.json")
+            
+            print(f"[DEBUG] Writing cursor configs to:")
+            print(f"  - Workspace: {dst_ws_cursor}")
+            print(f"  - Parent: {dst_pr_cursor}")
+            
+            for dst in (dst_ws_cursor, dst_pr_cursor):
+                try:
+                    with open(dst, "w", encoding="utf-8") as f:
+                        json.dump(cursor_cfg, f, indent=2)
+                    print(f"[DEBUG] Successfully wrote config to {dst}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to write to {dst}: {e}")
 
-        # write it into each .cursor/mcp.json
-        dst_ws_cursor = os.path.join(ws_cursor, "mcp.json")
-        dst_pr_cursor = os.path.join(pr_cursor, "mcp.json")
-        for dst in (dst_ws_cursor, dst_pr_cursor):
-            with open(dst, "w", encoding="utf-8") as f:
-                json.dump(cursor_cfg, f, indent=2)
-
-        # (already written both)
-
-        print(f"✅  Also wrote Cursor config → {dst_pr_cursor}")
-
-    print(f"✅  Synced env and VS Code config to {parent_vscode}")
-    if cursor:
-        print(f"✅  Synced cursor config to {os.path.join(parent, '.cursor')}")
+            print(f"✅  Wrote Cursor config to {os.path.join(parent, '.cursor')}")
+            print(f"✅  Synced env file to parent directory")
+        except Exception as e:
+            print(f"[ERROR] Failed to set up cursor config: {e}")
 
     print("[INFO] JupyterLab is still running in the background.")
-    print("       You can now open VS Code and do 'MCP: List Servers'.")
+    if cursor:
+        print("       You can now open Cursor and use the MCP servers.")
+    else:
+        print("       You can now open VS Code and do 'MCP: List Servers'.")
 
 # 7. A "meta" task to do it all (minus editing env)
 @task(pre=[setup_py, setup_js, setup_uvx, init_env])
